@@ -1,5 +1,3 @@
-package UDPConection;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -16,7 +14,7 @@ public class UDPClient extends JFrame {
     private static final int SERVER_WIDTH = 1920;
     private static final int SERVER_HEIGHT = 1080;
     private static Long telemetryInterval = 10L;
-    private static String serverIpAddress = "192.168.232.253";
+    private static String serverIpAddress = "192.168.43.80";
 
     private Point mousePosition = new Point(0, 0);
     private JPanel drawingPanel;

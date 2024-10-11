@@ -1,5 +1,3 @@
-package UDPConection;
-
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.net.DatagramPacket;
