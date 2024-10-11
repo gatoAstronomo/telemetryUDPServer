@@ -16,6 +16,7 @@ public class UDPClient extends JFrame {
     private static final int SERVER_WIDTH = 1920;
     private static final int SERVER_HEIGHT = 1080;
     private static Long telemetryInterval = 10L;
+    private static String serverIpAddress = "192.168.232.253";
 
     private Point mousePosition = new Point(0, 0);
     private JPanel drawingPanel;
@@ -92,7 +93,7 @@ public class UDPClient extends JFrame {
     private void initializeNetwork() {
         try {
             clientSocket = new DatagramSocket();
-            serverAddress = InetAddress.getByName("localhost");
+            serverAddress = InetAddress.getByName(serverIpAddress);
             serverPort = 12345;
         } catch (IOException e) {
             e.printStackTrace();
