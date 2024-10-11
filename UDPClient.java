@@ -1,119 +1,89 @@
 package UDPConection;
 
-import java.awt.MouseInfo;
-import java.awt.Point;
+import javax.swing.*;
+import java.awt.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
-public class UDPServer {
-    private static final int PORT = 12345;
-    private static final long DEFAULT_TELEMETRY_INTERVAL = 10; // 10 ms
+public class UDPClient extends JFrame {
+    private static final int FACTOR = 4*2;
+    private static final int WIDTH = 160*FACTOR;
+    private static final int HEIGHT = 90 *FACTOR;
+    private static final int CURSOR_SIZE = 20;
+    private Point mousePosition = new Point(0, 0);
+    private static final int SERVER_WIDTH = 1920;  // Asumimos una resolución de 1920x1080
+    private static final int SERVER_HEIGHT = 1080; // Ajusta estos valores si son diferentes
 
-    private DatagramSocket serverSocket;
-    private AtomicBoolean telemetryActive = new AtomicBoolean(false);
-    private AtomicLong telemetryInterval = new AtomicLong(DEFAULT_TELEMETRY_INTERVAL);
-    private InetAddress clientAddress;
-    private int clientPort;
-    private ScheduledExecutorService scheduler;
+    public UDPClient() {
+        setTitle("Mouse Telemetry");
+        setSize(WIDTH, HEIGHT);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setResizable(false);
 
-    public static void main(String[] args) {
-        new UDPServer().start();
-    }
+        JPanel panel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    public void start() {
-        try {
-            serverSocket = new DatagramSocket(PORT);
-            System.out.println("Servidor UDP escuchando en el puerto " + PORT);
-            
-            while (true) {
-                handleIncomingPackets();
+                // Fondo negro
+                g2d.setColor(Color.BLACK);
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+
+                // Puntero blanco
+                g2d.setColor(Color.WHITE);
+                int x = mousePosition.x - CURSOR_SIZE / 2;
+                int y = mousePosition.y - CURSOR_SIZE / 2;
+                g2d.fillOval(x, y, CURSOR_SIZE, CURSOR_SIZE);
             }
-        } catch (IOException e) {
-            System.err.println("Error en el servidor: " + e.getMessage());
-        } finally {
-            if (serverSocket != null && !serverSocket.isClosed()) {
-                serverSocket.close();
-            }
-        }
+        };
+        add(panel);
     }
 
-    private void handleIncomingPackets() throws IOException {
-        byte[] receiveData = new byte[1024];
-        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-        serverSocket.receive(receivePacket);
-
-        String request = new String(receivePacket.getData(), 0, receivePacket.getLength()).trim();
-        
-        if (request.startsWith("START TELEMETRY")) {
-            startTelemetry(receivePacket.getAddress(), receivePacket.getPort());
-        } else if ("STOP TELEMETRY".equalsIgnoreCase(request)) {
-            stopTelemetry();
-        } else if (request.startsWith("SET INTERVAL")) {
-            setTelemetryInterval(request);
-        }
+    public void updateMousePosition(int x, int y) {
+        // Escalar las coordenadas del servidor a nuestra ventana
+        int scaledX = (int) ((double) x / SERVER_WIDTH * WIDTH);
+        int scaledY = (int) ((double) y / SERVER_HEIGHT * HEIGHT);
+        mousePosition.setLocation(scaledX, scaledY);
+        repaint();
     }
 
-    private void startTelemetry(InetAddress address, int port) {
-        clientAddress = address;
-        clientPort = port;
-        telemetryActive.set(true);
-        System.out.println("Telemetría iniciada para el cliente: " + clientAddress + ":" + clientPort);
-        
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdown();
-        }
-        
-        scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(this::sendTelemetryData, 0, telemetryInterval.get(), TimeUnit.MILLISECONDS);
-    }
+    public static void main(String[] args) throws Exception {
+        UDPClient client = new UDPClient();
+        client.setVisible(true);
 
-    private void stopTelemetry() {
-        telemetryActive.set(false);
-        System.out.println("Telemetría detenida para el cliente: " + clientAddress + ":" + clientPort);
-        
-        if (scheduler != null) {
-            scheduler.shutdown();
-        }
-    }
+        DatagramSocket clientSocket = new DatagramSocket();
+        InetAddress serverAddress = InetAddress.getByName("localhost");
+        int serverPort = 12345;
 
-    private void setTelemetryInterval(String request) {
-        try {
-            long newInterval = Long.parseLong(request.split(" ")[2]);
-            if (newInterval > 0) {
-                telemetryInterval.set(newInterval);
-                System.out.println("Intervalo de telemetría actualizado a " + newInterval + " ms");
-                if (telemetryActive.get()) {
-                    // Reiniciar la telemetría con el nuevo intervalo
-                    startTelemetry(clientAddress, clientPort);
-                }
-            } else {
-                System.out.println("El intervalo debe ser mayor que 0");
-            }
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-            System.out.println("Formato inválido para SET INTERVAL. Uso: SET INTERVAL <valor_en_ms>");
-        }
-    }
+        // Enviar la solicitud para iniciar la telemetría
+        String startTelemetryMessage = "START TELEMETRY";
+        byte[] sendData = startTelemetryMessage.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, serverPort);
+        clientSocket.send(sendPacket);
 
-    private void sendTelemetryData() {
-        if (!telemetryActive.get()) {
-            return;
-        }
+        System.out.println("Telemetría iniciada. Esperando coordenadas del servidor...");
 
-        try {
-            Point mousePosition = MouseInfo.getPointerInfo().getLocation();
-            String coordinates = "X:" + mousePosition.x + " Y:" + mousePosition.y;
-            byte[] sendData = coordinates.getBytes();
-            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, clientAddress, clientPort);
-            serverSocket.send(sendPacket);
-        } catch (IOException e) {
-            System.err.println("Error al enviar datos de telemetría: " + e.getMessage());
+        // Bucle para recibir las coordenadas del mouse
+        while (true) {
+            byte[] receiveData = new byte[1024];
+            DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+            clientSocket.receive(receivePacket);
+
+            // Procesar las coordenadas del mouse
+            String mouseCoordinates = new String(receivePacket.getData(), 0, receivePacket.getLength());
+            String[] coordinates = mouseCoordinates.split(" ");
+            int x = Integer.parseInt(coordinates[0].split(":")[1]);
+            int y = Integer.parseInt(coordinates[1].split(":")[1]);
+
+            // Imprimir las coordenadas por consola
+            System.out.println("Coordenadas del mouse: " + mouseCoordinates);
+
+            // Actualizar la posición del mouse en la ventana
+            SwingUtilities.invokeLater(() -> client.updateMousePosition(x, y));
         }
     }
 }
