@@ -15,11 +15,14 @@ public class UDPClient extends JFrame {
     private static final int CURSOR_SIZE = 20;
     private static final int SERVER_WIDTH = 1920;
     private static final int SERVER_HEIGHT = 1080;
+    private static Long telemetryInterval = 10L;
 
     private Point mousePosition = new Point(0, 0);
     private JPanel drawingPanel;
     private JButton startButton;
     private JButton stopButton;
+    private JButton setIntervalButton;
+    private JTextField setIntervalTextField;
     private DatagramSocket clientSocket;
     private InetAddress serverAddress;
     private int serverPort;
@@ -44,7 +47,7 @@ public class UDPClient extends JFrame {
         JPanel buttonPanel = createButtonPanel();
         add(buttonPanel, BorderLayout.SOUTH);
 
-        pack();
+        // pack();
     }
 
     private JPanel createDrawingPanel() {
@@ -70,12 +73,18 @@ public class UDPClient extends JFrame {
         JPanel buttonPanel = new JPanel();
         startButton = new JButton("Start Telemetry");
         stopButton = new JButton("Stop Telemetry");
+        setIntervalButton = new JButton("Set Interval");
+        setIntervalTextField = new JTextField();
+        setIntervalTextField.setPreferredSize(new java.awt.Dimension(150, 25)); // Aumenta el ancho a 150, mantén la altura en 25
         
         startButton.addActionListener(this::startTelemetry);
         stopButton.addActionListener(this::stopTelemetry);
+        setIntervalButton.addActionListener(this::setTelemetryInterval);
         
         buttonPanel.add(startButton);
         buttonPanel.add(stopButton);
+        buttonPanel.add(setIntervalButton);
+        buttonPanel.add(setIntervalTextField);
         
         return buttonPanel;
     }
@@ -95,6 +104,7 @@ public class UDPClient extends JFrame {
         if (!telemetryActive) {
             telemetryActive = true;
             sendMessage("START TELEMETRY");
+            
             new Thread(this::receiveTelemetry).start();
             startButton.setEnabled(false);
             stopButton.setEnabled(true);
@@ -107,6 +117,18 @@ public class UDPClient extends JFrame {
             sendMessage("STOP TELEMETRY");
             startButton.setEnabled(true);
             stopButton.setEnabled(false);
+        }
+    }
+
+    private void setTelemetryInterval(ActionEvent e){
+        if (telemetryActive) {
+            try {
+                telemetryInterval = Long.parseLong(setIntervalTextField.getText());
+                sendMessage("SET INTERVAL " + telemetryInterval);
+            } catch (NumberFormatException err) {
+                err.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error sending message: " + err.getMessage(), "Invalid telemetry interval", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
