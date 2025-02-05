@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class RelayServer {
-    private static final int RELAY_PORT = 54321;
+    private static final int RELAY_PORT = 12345;
     private static Map<String, InetAddress> clients = new HashMap<>();
     private static Map<String, Integer> ports = new HashMap<>();
 
