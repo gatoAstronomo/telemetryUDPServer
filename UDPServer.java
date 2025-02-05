@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 public class UDPServer {
     private static final int PORT = 12345;
     private static final long DEFAULT_TELEMETRY_INTERVAL = 10; // 10 ms
+    private static String EC2RelayIP = "44.197.32.169";
 
     private DatagramSocket serverSocket;
     private AtomicBoolean telemetryActive = new AtomicBoolean(false);
@@ -29,7 +30,7 @@ public class UDPServer {
         try {
             serverSocket = new DatagramSocket(PORT);
             System.out.println("Servidor UDP escuchando en el puerto " + PORT);
-            
+
             while (true) {
                 handleIncomingPackets();
             }
@@ -48,7 +49,7 @@ public class UDPServer {
         serverSocket.receive(receivePacket);
 
         String request = new String(receivePacket.getData(), 0, receivePacket.getLength()).trim();
-        
+
         if (request.startsWith("START TELEMETRY")) {
             startTelemetry(receivePacket.getAddress(), receivePacket.getPort());
         } else if ("STOP TELEMETRY".equalsIgnoreCase(request)) {
@@ -59,15 +60,33 @@ public class UDPServer {
     }
 
     private void startTelemetry(InetAddress address, int port) {
+        try {
+            // Registrar en el relay
+            String registerMessage = "REGISTER_SERVER";
+            byte[] sendData = registerMessage.getBytes();
+            DatagramPacket registerPacket = new DatagramPacket(
+                    sendData,
+                    sendData.length,
+                    InetAddress.getByName(EC2RelayIP),
+                    54321);
+            serverSocket.send(registerPacket);
+
+            clientAddress = InetAddress.getByName(EC2RelayIP); // Ahora apunta al relay
+            clientPort = 54321;
+
+        } catch (IOException e) {
+            System.err.println("Error de registro en relay: " + e.getMessage());
+        }
+
         clientAddress = address;
         clientPort = port;
         telemetryActive.set(true);
         System.out.println("Telemetría iniciada para el cliente: " + clientAddress + ":" + clientPort);
-        
+
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
         }
-        
+
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(this::sendTelemetryData, 0, telemetryInterval.get(), TimeUnit.MILLISECONDS);
     }
@@ -75,7 +94,7 @@ public class UDPServer {
     private void stopTelemetry() {
         telemetryActive.set(false);
         System.out.println("Telemetría detenida para el cliente: " + clientAddress + ":" + clientPort);
-        
+
         if (scheduler != null) {
             scheduler.shutdown();
         }
@@ -99,19 +118,20 @@ public class UDPServer {
         }
     }
 
+    // Modificar sendTelemetryData
     private void sendTelemetryData() {
-        if (!telemetryActive.get()) {
-            return;
-        }
-
         try {
             Point mousePosition = MouseInfo.getPointerInfo().getLocation();
-            String coordinates = "X:" + mousePosition.x + " Y:" + mousePosition.y;
+            String coordinates = "CLIENT:X:" + mousePosition.x + " Y:" + mousePosition.y; // Prefijo para routing
             byte[] sendData = coordinates.getBytes();
-            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, clientAddress, clientPort);
+            DatagramPacket sendPacket = new DatagramPacket(
+                    sendData,
+                    sendData.length,
+                    clientAddress,
+                    clientPort);
             serverSocket.send(sendPacket);
         } catch (IOException e) {
-            System.err.println("Error al enviar datos de telemetría: " + e.getMessage());
+            System.err.println("Error al enviar datos al relay: " + e.getMessage());
         }
     }
 }

@@ -14,7 +14,7 @@ public class UDPClient extends JFrame {
     private static final int SERVER_WIDTH = 1920;
     private static final int SERVER_HEIGHT = 1080;
     private static Long telemetryInterval = 10L;
-    private static String serverIpAddress = "192.168.43.80";
+    public static String serverIpAddress = "44.197.32.169";
 
     private Point mousePosition = new Point(0, 0);
     private JPanel drawingPanel;
@@ -24,7 +24,7 @@ public class UDPClient extends JFrame {
     private JTextField setIntervalTextField;
     private DatagramSocket clientSocket;
     private InetAddress serverAddress;
-    private int serverPort;
+    private int serverPort = 12345;
     private boolean telemetryActive = false;
 
     public UDPClient() {
@@ -56,10 +56,10 @@ public class UDPClient extends JFrame {
                 super.paintComponent(g);
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                
+
                 g2d.setColor(Color.BLACK);
                 g2d.fillRect(0, 0, getWidth(), getHeight());
-                
+
                 g2d.setColor(Color.WHITE);
                 int x = mousePosition.x - CURSOR_SIZE / 2;
                 int y = mousePosition.y - CURSOR_SIZE / 2;
@@ -74,28 +74,38 @@ public class UDPClient extends JFrame {
         stopButton = new JButton("Stop Telemetry");
         setIntervalButton = new JButton("Set Interval");
         setIntervalTextField = new JTextField();
-        setIntervalTextField.setPreferredSize(new java.awt.Dimension(150, 25)); // Aumenta el ancho a 150, mantén la altura en 25
-        
+        setIntervalTextField.setPreferredSize(new java.awt.Dimension(150, 25)); // Aumenta el ancho a 150, mantén la
+                                                                                // altura en 25
+
         startButton.addActionListener(this::startTelemetry);
         stopButton.addActionListener(this::stopTelemetry);
         setIntervalButton.addActionListener(this::setTelemetryInterval);
-        
+
         buttonPanel.add(startButton);
         buttonPanel.add(stopButton);
         buttonPanel.add(setIntervalButton);
         buttonPanel.add(setIntervalTextField);
-        
+
         return buttonPanel;
     }
 
     private void initializeNetwork() {
         try {
             clientSocket = new DatagramSocket();
-            serverAddress = InetAddress.getByName(serverIpAddress);
-            serverPort = 12345;
+            serverAddress = InetAddress.getByName("44.197.32.169"); // Apuntar al relay
+            serverPort = 54321;
+
+            // Registrar cliente en el relay
+            String registerMessage = "REGISTER_CLIENT:CLIENT";
+            byte[] sendData = registerMessage.getBytes();
+            DatagramPacket registerPacket = new DatagramPacket(
+                    sendData,
+                    sendData.length,
+                    serverAddress,
+                    serverPort);
+            clientSocket.send(registerPacket);
         } catch (IOException e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error initializing network: " + e.getMessage(), "Network Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -103,7 +113,7 @@ public class UDPClient extends JFrame {
         if (!telemetryActive) {
             telemetryActive = true;
             sendMessage("START TELEMETRY");
-            
+
             new Thread(this::receiveTelemetry).start();
             startButton.setEnabled(false);
             stopButton.setEnabled(true);
@@ -119,14 +129,15 @@ public class UDPClient extends JFrame {
         }
     }
 
-    private void setTelemetryInterval(ActionEvent e){
+    private void setTelemetryInterval(ActionEvent e) {
         if (telemetryActive) {
             try {
                 telemetryInterval = Long.parseLong(setIntervalTextField.getText());
                 sendMessage("SET INTERVAL " + telemetryInterval);
             } catch (NumberFormatException err) {
                 err.printStackTrace();
-                JOptionPane.showMessageDialog(this, "Error sending message: " + err.getMessage(), "Invalid telemetry interval", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Error sending message: " + err.getMessage(),
+                        "Invalid telemetry interval", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -139,7 +150,8 @@ public class UDPClient extends JFrame {
             System.out.println("Sent message: " + message);
         } catch (IOException e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error sending message: " + e.getMessage(), "Network Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error sending message: " + e.getMessage(), "Network Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -149,18 +161,23 @@ public class UDPClient extends JFrame {
                 byte[] receiveData = new byte[1024];
                 DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 clientSocket.receive(receivePacket);
-                
-                String mouseCoordinates = new String(receivePacket.getData(), 0, receivePacket.getLength());
-                String[] coordinates = mouseCoordinates.split(" ");
-                int x = Integer.parseInt(coordinates[0].split(":")[1]);
-                int y = Integer.parseInt(coordinates[1].split(":")[1]);
-                
-                System.out.println("Coordenadas del mouse: " + mouseCoordinates);
-                SwingUtilities.invokeLater(() -> updateMousePosition(x, y));
+
+                String message = new String(receivePacket.getData(), 0, receivePacket.getLength());
+                if (message.startsWith("CLIENT:")) {
+                    String mouseCoordinates = message.substring(7);
+                    String[] coordinates = mouseCoordinates.split(" ");
+                    int x = Integer.parseInt(coordinates[0].split(":")[1]);
+                    int y = Integer.parseInt(coordinates[1].split(":")[1]);
+
+                    System.out.println("Coordenadas del mouse: " + mouseCoordinates);
+                    SwingUtilities.invokeLater(() -> updateMousePosition(x, y));
+                }
+
             } catch (IOException e) {
                 if (telemetryActive) {
                     e.printStackTrace();
-                    JOptionPane.showMessageDialog(this, "Error receiving telemetry: " + e.getMessage(), "Network Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Error receiving telemetry: " + e.getMessage(), "Network Error",
+                            JOptionPane.ERROR_MESSAGE);
                     telemetryActive = false;
                 }
             }
@@ -176,6 +193,9 @@ public class UDPClient extends JFrame {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
+            if (args.length > 0) {
+                serverIpAddress = args[0];
+            }
             UDPClient client = new UDPClient();
             client.setVisible(true);
         });
